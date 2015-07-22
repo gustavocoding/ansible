@@ -1,0 +1,92 @@
+- hosts: spark
+  sudo: true
+
+  tasks:
+    - name: install required packages
+      yum: pkg={{item}} state=installed
+      with_items:
+        - docker-io
+        - unzip
+        - java-1.8.0-openjdk-devel
+        - python-docker-py
+        - words
+
+    - name: get spark
+      get_url: url='http://mirror.vorboss.net/apache/spark/spark-1.4.0/spark-1.4.0-bin-hadoop2.6.tgz' dest='/usr/local/spark.tgz'
+
+    - name: extract spark
+      unarchive: src='/usr/local/spark.tgz' dest='/usr/local/' copy=no
+
+    - name: symlink for spark
+      file: src=/usr/local/spark-1.4.0-bin-hadoop2.6/ dest=/usr/local/spark state=link
+
+
+- hosts: master
+  sudo: true
+
+  tasks:
+    - name: start master
+      shell: /usr/local/spark/sbin/start-master.sh --webui-port 9080
+      environment:
+        SPARK_MASTER_IP: "{{ ansible_eth0.ipv4.address }}"
+
+    - name: start docker service
+      service: name=docker state=started
+
+    - name: start gossip router
+      docker:
+        image: gustavonalle/jgroups-gossip
+        name: gossip
+        ports: "12001:12001"
+        state: started
+
+
+- hosts: slave
+  sudo: true
+
+  tasks:
+    - name: slave pid
+      command: pgrep -f org.apache.spark.deploy.worker.Worker
+      ignore_errors: yes
+      register: pidslave
+
+    - name: stop slave
+      shell: kill {{ pidslave.stdout }}
+      when: pidslave.rc == 0
+
+    - name: start slave
+      shell: /usr/local/spark/sbin/start-slave.sh spark://{{ hostvars[groups['master'][0]]['ansible_eth0']['ipv4']['address'] }}:7077 --webui-port 9081
+
+- hosts: infinispan 
+  sudo: true
+
+  tasks:
+    - name: get infinispan server
+      get_url: url='http://downloads.jboss.org/infinispan/{{ infinispanVersion }}/infinispan-server-{{ infinispanVersion }}-bin.zip' dest=/usr/local/infinispan-server-{{ infinispanVersion }}-bin.zip
+
+    - name: extract infinispan 
+      unarchive: src='/usr/local/infinispan-server-{{ infinispanVersion }}-bin.zip' dest='/usr/local/' copy=no
+    
+    - name: symlink for infinispan
+      file: src=/usr/local/infinispan-server-{{ infinispanVersion }}/ dest=/usr/local/infinispan state=link
+
+    - name: infinispan pid
+      command: pgrep -f org.jboss.as.standalone
+      ignore_errors: yes
+      register: pid
+
+    - name: stop infinispan
+      shell: kill {{ pid.stdout }}
+      when: pid.rc == 0
+
+    - name: increase memory
+      shell: "sed -i 's/-Xmx512/-Xmx4096/g' /usr/local/infinispan/bin/standalone.conf"
+
+    - name: increase segments
+      replace: dest=/usr/local/infinispan/standalone/configuration/clustered.xml regexp='segments="20"' replace='segments="80"'
+
+    - name: start infinispan
+      shell: "nohup /usr/local/infinispan/bin/standalone.sh -c clustered.xml -Djboss.default.jgroups.stack=tcp-gossip -Djgroups.gossip.initial_hosts={{ hostvars[groups['master'][0]]['ansible_eth0']['ipv4']['address']  }}[12001] -Djgroups.bind_addr={{ ansible_eth0.ipv4.address  }} -Djboss.bind.address={{ ansible_eth0.ipv4.address }} &"
+
+    - name: copy data generator
+      copy: src=generate.sh dest=~/generate.sh mode=0755
