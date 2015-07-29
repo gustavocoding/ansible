@@ -5,7 +5,7 @@ set -e -o pipefail -o errtrace -o functrace
 export ANSIBLE_HOST_KEY_CHECKING=False
 
 usage() { 
-   echo -e "\nUsage:\n$0 [number of nodes] [key-name] [flavour] [image_id] [infinispan_version]\n"
+   echo -e "\nUsage:\n$0 [number of nodes] [key-name] [flavour] [image_id] [infinispan_version] ([start_from Id])\n"
 } 
 
 if [  $# -le 4 ]
@@ -20,13 +20,13 @@ KEY_NAME=${2}
 FLAVOUR=${3}
 IMAGE=${4}
 INFINISPAN_VERSION=${5}
+START_FROM=${6,1}
 
 SECURITY_GROUPS="default,spark,infinispan_server"
 METADATA_MASTER="--meta ansible_host_groups=spark,master,slave,infinispan"
 METADATA_SLAVE="--meta ansible_host_groups=spark,slave,infinispan"
 
-START=1
-for (( c=$START; c<=$N; c++))
+for (( c=$START_FROM; c<=$N; c++))
 do
   echo "Provisioning server $c"
   [[ $c = 1 ]] && METADATA="$METADATA_MASTER" || METADATA="$METADATA_SLAVE"
