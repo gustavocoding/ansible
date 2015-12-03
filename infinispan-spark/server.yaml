@@ -12,13 +12,13 @@
         - words
 
     - name: get spark
-      get_url: url='http://mirror.vorboss.net/apache/spark/spark-1.4.0/spark-1.4.0-bin-hadoop2.6.tgz' dest='/usr/local/spark.tgz'
+      get_url: url='http://mirror.vorboss.net/apache/spark/spark-{{ sparkVersion }}/spark-{{ sparkVersion }}-bin-hadoop2.6.tgz' dest='/usr/local/spark.tgz'
 
     - name: extract spark
       unarchive: src='/usr/local/spark.tgz' dest='/usr/local/' copy=no
 
     - name: symlink for spark
-      file: src=/usr/local/spark-1.4.0-bin-hadoop2.6/ dest=/usr/local/spark state=link
+      file: src=/usr/local/spark-{{ sparkVersion }}-bin-hadoop2.6/ dest=/usr/local/spark state=link
 
 
 - hosts: master
