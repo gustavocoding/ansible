@@ -1,7 +1,6 @@
 #!/bin/bash
 
 set -e -o pipefail -o errtrace -o functrace
-set -x
 
 export ANSIBLE_HOST_KEY_CHECKING=False
 
