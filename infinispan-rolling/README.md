@@ -33,7 +33,7 @@ To provision the source and target clusters, run the script ./create.sh and foll
 example:
 
 ```
-./create 10 -k "my_key" -i "m1.large" -f "f2df087c-4e54-4047-98c0-8e03dbf6412b" -v 8.1.0.Final -s 4
+./create 10 -k "my_key" -f "m1.large" -i "f2df087c-4e54-4047-98c0-8e03dbf6412b" -v 8.1.0.Final -s 4
 ```
 
 Will create 10 node cluster with the provided key, flavour and image id containing Infinispan Server 8.1.0.Final, and will start from server #4.
@@ -41,7 +41,7 @@ Will create 10 node cluster with the provided key, flavour and image id containi
 To provision an infinispan cluster built from sources:
 
 ```
-./create 10 -k "my_key" -i "m1.large" -f "f2df087c-4e54-4047-98c0-8e03dbf6412b" -r https://github.com/infinispan.git -b master
+./create 10 -k "my_key" -f "m1.large" -i "f2df087c-4e54-4047-98c0-8e03dbf6412b" -r https://github.com/infinispan.git -b master
 ```
 
 Will create the cluster from the specified github repo (-r) and branch (-b) 
