@@ -2,10 +2,11 @@
 
 ### Preparation
 
-Download and ./source the rc file from Openstack  
-Log in to the OpenStack dashboard, choose the project for which you want  
-to download the OpenStack RC file, and click 'Access & Security', then go to 'API Access'. 
-Click 'Download OpenStack RC File' and save the file. Source it using: 
+Download and ./source the rc file from Openstack:    
+* Log in to the OpenStack dashboard, choose the project for which you want to download the OpenStack RC file
+* Click on 'Access & Security', then go to 'API Access'
+* Click 'Download OpenStack RC File' and save the file
+* Source the file:
 
 ```
 source openstack.rc
