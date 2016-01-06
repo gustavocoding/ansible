@@ -1,0 +1,105 @@
+- hosts: all
+  sudo: true
+  tasks:
+    - name: install required packages
+      yum: pkg={{item}} state=installed
+      with_items:
+       - docker-io
+       - unzip
+       - java-1.8.0-openjdk-devel
+       - python-docker-py
+       - maven
+       - words
+       - git
+       - scala
+       - html2text
+
+
+- hosts: master
+  sudo: true
+
+  tasks:
+    - name: start docker service
+      service: name=docker state=started
+ 
+    - name: pull docker image
+      shell: docker pull gustavonalle/jgroups-gossip:3.6.4.Final
+
+    - name: start gossip router
+      docker:
+        image: gustavonalle/jgroups-gossip:3.6.4.Final
+        name: gossip
+        ports: "12001:12001"
+        state: started
+
+- hosts: infinispan 
+  sudo: true
+
+  tasks:
+    - name: get infinispan server
+      get_url: url='http://downloads.jboss.org/infinispan/{{ infinispanVersion }}/infinispan-server-{{ infinispanVersion }}-bin.zip' dest=/usr/local/infinispan-server-{{ infinispanVersion }}-bin.zip
+      when: not(infinispanVersion | trim == '')
+
+    - name: extract infinispan 
+      unarchive: src='/usr/local/infinispan-server-{{ infinispanVersion }}-bin.zip' dest='/usr/local/' copy=no
+      when: not(infinispanVersion | trim == '')
+    
+    - name: symlink for infinispan
+      file: src=/usr/local/infinispan-server-{{ infinispanVersion }}/ dest=/usr/local/infinispan state=link
+      when: not(infinispanVersion | trim == '')
+
+    - name: hack to make repo.jboss.org accessible
+      lineinfile: dest=/etc/hosts line="209.132.182.33 repository.jboss.org"
+      when: infinispanVersion | trim == ''
+
+    - name: clone sources
+      git: repo={{ github }} dest=/usr/local/source version={{ branch }} force=yes
+      when: infinispanVersion | trim == ''
+      tags: source
+
+    - name: build sources
+      shell: "cd /usr/local/source && mvn install -DskipTests=true -s maven-settings.xml > build.log"
+      when: infinispanVersion | trim == ''
+      tags: source
+
+    - name: source version
+      shell: "cat /usr/local/source/pom.xml | grep version | grep -v xml  | html2text | tr -d ' '"
+      register: source_version 
+      when: infinispanVersion | trim == ''
+
+    - name: install binary 
+      shell: "rm -Rf /usr/local/infinispan-server && cp -R /usr/local/source/server/integration/build/target/infinispan-server-*/ /usr/local/infinispan-server/ && ln -nfs /usr/local/infinispan-server/ /usr/local/infinispan"
+      when: infinispanVersion | trim == ''
+
+    - name: infinispan pid
+      command: pgrep -f org.jboss.as.standalone
+      ignore_errors: yes
+      register: pid
+
+    - name: stop infinispan
+      shell: kill {{ pid.stdout }}
+      when: pid.rc == 0
+
+    - name: increase memory
+      shell: "sed -i 's/-Xmx512/-Xmx5096/g' /usr/local/infinispan/bin/standalone.conf"
+
+    - name: increase remote timeout
+      replace: dest=/usr/local/infinispan/standalone/configuration/clustered.xml regexp='remote-timeout="30000"' replace='remote-timeout="90000"'
+
+    - name: increase segments
+      replace: dest=/usr/local/infinispan/standalone/configuration/clustered.xml regexp='segments="20"' replace='segments="20"'
+
+    - name: start infinispan
+      shell: "nohup /usr/local/infinispan/bin/standalone.sh -c clustered.xml -Djboss.default.jgroups.stack=tcp-gossip -Djgroups.gossip.initial_hosts={{ hostvars[groups['master'][0]]['ansible_eth0']['ipv4']['address']  }}[12001] -Djgroups.bind_addr={{ ansible_eth0.ipv4.address  }} -Djboss.bind.address={{ ansible_eth0.ipv4.address }} &"
+
+    - name: copy data generator
+      copy: src=load.sh dest=/usr/local/load.sh mode=0755
+
+    - name: copy data generator deps
+      shell: "cp /root/.m2/repository/org/infinispan/infinispan-remote/{{ source_version.stdout }}/infinispan-remote-{{ source_version.stdout }}.jar /usr/local/infinispan-remote.jar"
+      when: infinispanVersion | trim == ''
+
+    - name: copy binary deps
+      get_url: url='http://repo1.maven.org/maven2/org/infinispan/infinispan-remote/{{ infinispanVersion }}/infinispan-remote-{{ infinispanVersion }}.jar' dest=/usr/local/infinispan-remote.jar
+      when: not(infinispanVersion | trim == '')
+

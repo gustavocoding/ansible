@@ -1,0 +1,1 @@
+ansible all -i inv.sh -m shell -a "/usr/local/infinispan/bin/ispn-cli.sh -c '/subsystem=datagrid-infinispan/cache-container=clustered/distributed-cache=default:read-attribute(name=number-of-entries)'"  --user fedora --sudo
