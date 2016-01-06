@@ -2,10 +2,10 @@
 
 ### Preparation
 
-Download and ./source the rc file from Openstack
-Log in to the OpenStack dashboard, choose the project for which you want 
-to download the OpenStack RC file, and click 'Access & Security', then go to 'API Access'.
-Click 'Download OpenStack RC File' and save the file. Source it using:
+Download and ./source the rc file from Openstack 
+Log in to the OpenStack dashboard, choose the project for which you want  
+to download the OpenStack RC file, and click 'Access & Security', then go to 'API Access'. 
+Click 'Download OpenStack RC File' and save the file. Source it using: 
 
 ```
 source openstack.rc
@@ -60,5 +60,5 @@ ansible-playbook --user fedora -i inventory.py server.yaml --extra-vars "infinis
 * ispn-gc.sh:      Triggers a garbage collection cycle on all members
 * cache-clear.sh:  Erases all data on the default cache
 * cache-debug.sh:  Increase log level for org.infinispan to TRACE
-* cache-load.sh:   Load cache with data, keys are integers and values are random phrases generated from the Linux dictionary
+* cache-load.sh:   Load cache with data, keys are integers and values are random phrases generated from the Linux dictionary  
                    Example: ./cache-load.sh --entries 100000 --write-batch 20000 --max-phrase-size 10
