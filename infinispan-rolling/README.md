@@ -75,10 +75,12 @@ ansible-playbook --user fedora -i inventory.py server.yaml --extra-vars "infinis
 
 To run the scripts below, it's necessary to pass "-l <clusterName>": 
 
-* cache-size.sh:   Prints the cache size of each member
-* ispn-members.sh: Prints the members of the cluster, as seen by each member
-* ispn-gc.sh:      Triggers a garbage collection cycle on all members
-* cache-clear.sh:  Erases all data on the default cache
-* cache-debug.sh:  Increase log level for org.infinispan to TRACE
-* cache-load.sh:   Load cache with data, keys are integers and values are random phrases generated from the Linux dictionary  
-                   Example: ./cache-load.sh --entries 100000 --write-batch 20000 --max-phrase-size 10
+* cache-size.sh:             Prints the cache size of each member
+* ispn-members.sh:           Prints the members of the cluster, as seen by each member
+* ispn-gc.sh:                Triggers a garbage collection cycle on all members
+* cache-clear.sh:            Erases all data on the default cache
+* cache-debug.sh:            Increase log level for org.infinispan to TRACE
+* cache-load.sh:             Load cache with data, keys are integers and values are random phrases generated from the Linux dictionary  
+                                       Example: ./cache-load.sh --entries 100000 --write-batch 20000 --max-phrase-size 10
+* cache-record-keyset.sh:    Calls the ```recordKnownGlobalKeyset``` operation in the default cache in a cluster node
+* cache-synchronize-data.sh: Calls the ```synchronizeData``` operation in the default cache in a cluster node
