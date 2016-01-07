@@ -11,7 +11,7 @@ import scala.io._
 
 val usage = """
 
-\nUsage: load.sh --entries num [--write-batch num] [--max-phrase-size num]\n
+Usage: load.sh --entries num [--write-batch num] [--max-phrase-size num]
 
 """
 

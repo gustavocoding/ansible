@@ -1,5 +1,7 @@
 - hosts: all
   sudo: true
+  roles:
+    - yaegashi.blockinfile
   tasks:
     - name: install required packages
       yum: pkg={{item}} state=installed
@@ -88,6 +90,28 @@
 
     - name: increase segments
       replace: dest=/usr/local/infinispan/standalone/configuration/clustered.xml regexp='segments="20"' replace='segments="20"'
+
+    - name: configure cache loader
+      blockinfile: 
+         dest: /usr/local/infinispan/standalone/configuration/clustered.xml
+         insertafter: 'distributed-cache name="default"'
+         marker: '<!-- ansible #1 -->'
+         content: |     
+                <remote-store cache="default" socket-timeout="60000" tcp-no-delay="true" shared="true" hotrod-wrapping="true" purge="false" passivation="false">
+                      <remote-server outbound-socket-binding="source-cluster"/>
+                </remote-store>
+      when: not(cluster | trim == '')
+
+    - name: configure cache loader outbound
+      blockinfile:
+         dest: /usr/local/infinispan/standalone/configuration/clustered.xml
+         insertafter: 'socket-binding name="websocket"'
+         marker: '<!-- ansible #2 -->'
+         content: | 
+             <outbound-socket-binding name="source-cluster">
+               <remote-destination host="{{ cluster }}" port="11222"/>
+             </outbound-socket-binding> 
+      when: not(cluster | trim == '')
 
     - name: start infinispan
       shell: "nohup /usr/local/infinispan/bin/standalone.sh -c clustered.xml -Djboss.default.jgroups.stack=tcp-gossip -Djgroups.gossip.initial_hosts={{ hostvars[groups['master'][0]]['ansible_eth0']['ipv4']['address']  }}[12001] -Djgroups.bind_addr={{ ansible_eth0.ipv4.address  }} -Djboss.bind.address={{ ansible_eth0.ipv4.address }} &"

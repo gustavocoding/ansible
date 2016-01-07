@@ -14,17 +14,21 @@ usage() {
 
 cat << EOF
 
-Usage: ./create.sh -k key -i image [-n nodes] [-f flavour] [-v infinispan version] [-r github repo] [-b git branch] [-s start] 
+Usage: ./create.sh -k key -i image -l label [-n nodes] [-f flavour] [-v infinispan version] [-c source cluster] [-r github repo] [-b git branch] [-s start] 
 
 	-k the key name on openstack 
 
         -i openstack image id
+
+	-l label for the cluster
 
 	-n number of nodes (default=$DEFAULT_NODES)
 
 	-f image flavour (default=$DEFAULT_FLAVOUR)
 
 	-v infinispan version (default=$DEFAULT_VERSION if github repo and branch not specified) 
+ 
+        -c source cluster to point to (remote cache loader)
 
 	-r github repo to build from sources (not used if -v specified)
 
@@ -37,7 +41,7 @@ Usage: ./create.sh -k key -i image [-n nodes] [-f flavour] [-v infinispan versio
 EOF
 
 }
-while getopts ":k:i:n:f:v:r:b:sh" o; do
+while getopts ":k:i:n:f:v:r:b:s:c:l:h" o; do
     case "${o}" in
         h) usage; exit 0;;
         k)
@@ -45,6 +49,9 @@ while getopts ":k:i:n:f:v:r:b:sh" o; do
             ;;
         i)
             i=${OPTARG}
+            ;;
+        l)
+            l=${OPTARG}
             ;;
         n)
             n=${OPTARG}
@@ -54,6 +61,9 @@ while getopts ":k:i:n:f:v:r:b:sh" o; do
             ;;
         v)
             v=${OPTARG}
+            ;;
+        c)
+            c=${OPTARG}
             ;;
         r)
             r=${OPTARG}
@@ -74,6 +84,13 @@ shift $((OPTIND-1))
 if [ ! "$k" ] || [ ! "$i" ]
 then
     echo "ERROR: -k and -i are mandatory"
+    usage
+    exit 1
+fi
+
+if [ ! "$l" ]
+then
+    echo "ERROR: must provide a label for the cluster (ex. 'mycluster')"
     usage
     exit 1
 fi
@@ -108,15 +125,16 @@ then
 fi
 GITHUB_REPO=${r}
 GITHUB_BRANCH=${b}
+SOURCE_CLUSTER=${c}
 START_FROM=${s:-$DEFAULT_START_INDEX}
+LABEL=${l}
 
 SECURITY_GROUPS="default,infinispan_server"
 
 for (( c=$START_FROM; c<=$N; c++))
 do
   echo "Provisioning server $c"
-  [[ $c = 1 ]] && METADATA="master,infinispan" || METADATA="infinispan"
-  SERVER=$(nova boot --flavor $FLAVOUR --image $IMAGE --security-groups $SECURITY_GROUPS --key-name $KEY_NAME --meta "ansible_host_groups=$METADATA" node$c | grep " id " | awk '{print $4}')
+  SERVER=$(nova boot --flavor $FLAVOUR --image $IMAGE --security-groups $SECURITY_GROUPS --key-name $KEY_NAME node$c-$LABEL | grep " id " | awk '{print $4}')
   STATUS=''
   while [[ "$STATUS" != "ACTIVE" ]];
   do
@@ -126,6 +144,8 @@ do
   done
   echo "Associating floating IP to server $SERVER"
   IP=$(nova floating-ip-create os1_public | grep os1_public | awk '{ print $2 }')
+  [[ $c = 1 ]] && MASTER=$IP 
+  MEMBER[c]=\"$IP\"
   nova floating-ip-associate $SERVER $IP
 done
 
@@ -135,12 +155,29 @@ sleep 30
 
 echo "Running Playbook"
 
-echo "Pre-caching the inventory"
-CACHED_INVENTORY=inv.sh
-./inventory.py > $CACHED_INVENTORY
-sed -i '1i#!/bin/bash' $CACHED_INVENTORY
-sed -i '2icat <<EOF' $CACHED_INVENTORY
-echo "EOF" >> $CACHED_INVENTORY
-chmod +x $CACHED_INVENTORY
+echo "Generating the inventory"
+INVENTORY="inv-$LABEL.sh"
 
-ansible-playbook --user fedora -i inv.sh server.yaml --extra-vars "infinispanVersion=$INFINISPAN_VERSION github=$GITHUB_REPO branch=$GITHUB_BRANCH"
+cat > $INVENTORY << END
+#!/bin/bash
+cat <<EOF
+{
+  "master": {
+     "hosts": [
+        "$MASTER"
+     ]
+  }, 
+  "infinispan": {
+     "hosts": [
+         $(IFS=, ; echo "${MEMBER[*]}" )
+     ]
+  }
+}
+EOF
+END
+
+chmod +x $INVENTORY
+
+echo "Playbook variables: infinispanVersion=$INFINISPAN_VERSION github=$GITHUB_REPO branch=$GITHUB_BRANCH cluster=$SOURCE_CLUSTER"
+
+ansible-playbook --user fedora -i inv-$LABEL.sh server.yaml --extra-vars "infinispanVersion=$INFINISPAN_VERSION github=$GITHUB_REPO branch=$GITHUB_BRANCH cluster=$SOURCE_CLUSTER"
