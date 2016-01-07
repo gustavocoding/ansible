@@ -41,7 +41,7 @@ To provision the source and target clusters, run the script ./create.sh and foll
 example:
 
 ```
-./create 10 -k "my_key" -f "m1.large" -i "f2df087c-4e54-4047-98c0-8e03dbf6412b" -l myCluster -v 8.1.0.Final -s 4
+./create.sh 10 -k "my_key" -f "m1.large" -i "f2df087c" -l myCluster -v 8.1.0.Final -s 4
 ```
 
 Will create 10 node cluster with the provided key, flavour and image id containing Infinispan Server 8.1.0.Final, and will start from server #4. 
@@ -50,7 +50,7 @@ The -l switch is used to name a cluster and isolate it.
 To provision an infinispan cluster built from sources:
 
 ```
-./create 10 -k "my_key" -f "m1.large" -i "f2df087c-4e54-4047-98c0-8e03dbf6412b" -r https://github.com/infinispan.git -b master -l myCluster
+./create.sh 10 -k "my_key" -f "m1.large" -i "f2df087c" -r https://github.com/infinispan.git -b master -l myCluster
 ```
 
 Will create the cluster from the specified github repo (-r) and branch (-b) 
@@ -60,7 +60,7 @@ Will create the cluster from the specified github repo (-r) and branch (-b)
 Target clusters will have a remote cache store that will initially point to the source cluster. During its creation, the -c flag should contain one adress from the source cluster, ex:  
 
 ```
-./create 10 -k "my_key" -f "m1.large" -i "f2df087c-4e54-4047-98c0-8e03dbf6412b" -l targetCluster -v 8.1.0.Final -c 172.18.20.12 
+./create.sh 10 -k "my_key" -f "m1.large" -i "f2df087c" -l targetCluster -v 8.1.0.Final -c 172.18.20.12 
 ```
 
 ### Error recovery
