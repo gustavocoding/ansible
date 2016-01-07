@@ -29,9 +29,6 @@ sudo ansible-galaxy install yaegashi.blockinfile
 
 #### Check openstack configuration
 
-Check the variable ```OS_NETWORK_NAME``` in the script file ```inventory.py``` to 
-match the Openstack installation
-
 The script assumes the following security groups are present in openstack and exposing the following TCP ports:
 
 * infinispan_server: 11222, 57600
