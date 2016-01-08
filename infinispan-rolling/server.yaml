@@ -83,10 +83,10 @@
       when: pid.rc == 0
 
     - name: increase memory
-      shell: "sed -i 's/-Xmx512/-Xmx5096/g' /usr/local/infinispan/bin/standalone.conf"
+      shell: "sed -i 's/-Xmx512/-Xmx6096/g' /usr/local/infinispan/bin/standalone.conf"
 
     - name: increase remote timeout
-      replace: dest=/usr/local/infinispan/standalone/configuration/clustered.xml regexp='remote-timeout="30000"' replace='remote-timeout="90000"'
+      replace: dest=/usr/local/infinispan/standalone/configuration/clustered.xml regexp='remote-timeout="30000"' replace='remote-timeout="600000"'
 
     - name: increase segments
       replace: dest=/usr/local/infinispan/standalone/configuration/clustered.xml regexp='segments="20"' replace='segments="20"'
@@ -97,7 +97,7 @@
          insertafter: 'distributed-cache name="default"'
          marker: '<!-- ansible #1 -->'
          content: |     
-                <remote-store cache="default" socket-timeout="60000" tcp-no-delay="true" shared="true" hotrod-wrapping="true" purge="false" passivation="false">
+                <remote-store cache="default" socket-timeout="60000" tcp-no-delay="true" read-only="true" shared="true" hotrod-wrapping="true" purge="false" passivation="false">
                       <remote-server outbound-socket-binding="source-cluster"/>
                 </remote-store>
       when: not(cluster | trim == '')
