@@ -91,6 +91,9 @@
     - name: increase segments
       replace: dest=/usr/local/infinispan/standalone/configuration/clustered.xml regexp='segments="20"' replace='segments="20"'
 
+    - name: change owners segments
+      replace: dest=/usr/local/infinispan/standalone/configuration/clustered.xml regexp='owners="2"' replace='owners="1"'
+
     - name: configure cache loader
       blockinfile: 
          dest: /usr/local/infinispan/standalone/configuration/clustered.xml
