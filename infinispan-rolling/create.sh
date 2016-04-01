@@ -14,7 +14,7 @@ usage() {
 
 cat << EOF
 
-Usage: ./create.sh -k key -i image -l label [-n nodes] [-f flavour] [-v infinispan version] [-c source cluster] [-r github repo] [-b git branch] [-s start] 
+Usage: ./create.sh -k key -i image -l label [-n nodes] [-f flavour] [-z path to server zip] [-p client zip] [-v infinispan version] [-c source cluster] [-r github repo] [-b git branch] [-s start] 
 
 	-k the key name on openstack 
 
@@ -30,9 +30,13 @@ Usage: ./create.sh -k key -i image -l label [-n nodes] [-f flavour] [-v infinisp
  
         -c source cluster to point to (remote cache loader)
 
-	-r github repo to build from sources (not used if -v specified)
+	-r github repo to build from sources
 
-	-b git branch to build from sources (not used if -v specified)
+	-b git branch to build from sources
+
+        -z Deploy specific server zip, will ignore -r, -b and -v arguments 
+
+        -p Deploy specific client jar zip, will ignore -r, -b and -v arguments
 
 	-s start from server index (default=$DEFAULT_START_INDEX)
         
@@ -41,7 +45,7 @@ Usage: ./create.sh -k key -i image -l label [-n nodes] [-f flavour] [-v infinisp
 EOF
 
 }
-while getopts ":k:i:n:f:v:r:b:s:c:l:h" o; do
+while getopts ":k:i:n:f:v:r:b:s:c:l:z:p:h" o; do
     case "${o}" in
         h) usage; exit 0;;
         k)
@@ -74,6 +78,12 @@ while getopts ":k:i:n:f:v:r:b:s:c:l:h" o; do
         s)
             s=${OPTARG}
             ;;
+        z)
+            z=${OPTARG}
+            ;;
+        p)
+            p=${OPTARG}
+            ;;
         *)
             usage
             ;;
@@ -95,19 +105,37 @@ then
     exit 1
 fi
 
+if [ "$z" ] && [ ! "$p" ]
+then
+    echo "ERROR: must specify location of client hotrod uberjar with the -p param"
+    usage
+    exit 1
+fi
+
+
+if [ "$z" ] && ([ "$r" ] || [ "$b" ] || [ "$v" ])
+then
+   echo "WARNING: -r and -b and -v will be ignored since zip package was specified"
+   unset r
+   unset b
+   unset v
+fi
+
 if [ "$v" ] && ([ "$r" ] || [ "$b" ])
 then
    echo "WARNING: -r and -b will be ignored since infinispan version was specified"
+   unset r
+   unset b
 fi
 
-if [ ! "$v" ] && ([ "$b" ] && [ ! "$r" ])
+if [ ! "$v" ] && [ ! "$z" ] && ([ "$b" ] && [ ! "$r" ])
 then
    echo "ERROR: missing git repo"
    usage
    exit 1
 fi
 
-if [ ! "$v" ] && ([ ! "$b" ] && [ "$r" ])
+if [ ! "$v" ] && [ ! "$z" ] && ([ ! "$b" ] && [ "$r" ])
 then
    echo "ERROR: missing git branch"
    usage
@@ -119,7 +147,9 @@ KEY_NAME=${k}
 IMAGE=${i}
 N=${n:-$DEFAULT_NODES}
 FLAVOUR=${f:-$DEFAULT_FLAVOUR}
-if [ ! "$r" ] 
+ZIP=${z}
+CLIENT_ZIP=${p}
+if [ ! "$r" ] && [ ! "$z" ] 
 then
   INFINISPAN_VERSION=${v:-$DEFAULT_VERSION}
 fi
@@ -143,7 +173,7 @@ do
     sleep 5
   done
   echo "Associating floating IP to server $SERVER"
-  IP=$(nova floating-ip-create os1_public | grep os1_public | awk '{ print $2 }')
+  IP=$(nova floating-ip-create os1_public | grep os1_public | awk '{ print $4 }')
   [[ $c = 1 ]] && MASTER=$IP 
   MEMBER[c]=\"$IP\"
   nova floating-ip-associate $SERVER $IP
@@ -177,7 +207,6 @@ EOF
 END
 
 chmod +x $INVENTORY
-
-echo "Playbook variables: infinispanVersion=$INFINISPAN_VERSION github=$GITHUB_REPO branch=$GITHUB_BRANCH cluster=$SOURCE_CLUSTER"
-
-ansible-playbook --user fedora -i inv-$LABEL.sh server.yaml --extra-vars "infinispanVersion=$INFINISPAN_VERSION github=$GITHUB_REPO branch=$GITHUB_BRANCH cluster=$SOURCE_CLUSTER"
+set -x
+ansible-playbook --user fedora -i inv-$LABEL.sh server.yaml --extra-vars "clientZip=$CLIENT_ZIP zip=$ZIP infinispanVersion=$INFINISPAN_VERSION github=$GITHUB_REPO branch=$GITHUB_BRANCH cluster=$SOURCE_CLUSTER"
+set +x

@@ -1,10 +1,18 @@
 - hosts: all
   sudo: true
+  gather_facts: false
+  tasks:
+    - name: install packages for ansible support
+      raw: dnf -y install python python-dnf libselinux-python
+
+- hosts: all
+  sudo: true
   roles:
     - yaegashi.blockinfile
   tasks:
+
     - name: install required packages
-      yum: pkg={{item}} state=installed
+      dnf: pkg={{item}} state=installed
       with_items:
        - docker-io
        - unzip
@@ -25,11 +33,11 @@
       service: name=docker state=started
  
     - name: pull docker image
-      shell: docker pull gustavonalle/jgroups-gossip:3.6.4.Final
+      shell: docker pull gustavonalle/jgroups-gossip:3.6.7.Final
 
     - name: start gossip router
       docker:
-        image: gustavonalle/jgroups-gossip:3.6.4.Final
+        image: gustavonalle/jgroups-gossip:3.6.7.Final
         name: gossip
         ports: "12001:12001"
         state: started
@@ -38,40 +46,49 @@
   sudo: true
 
   tasks:
+
+    - name: copy server 
+      copy: src={{ zip }} dest=/usr/local/
+      when: not(zip | trim == '')
+
     - name: get infinispan server
       get_url: url='http://downloads.jboss.org/infinispan/{{ infinispanVersion }}/infinispan-server-{{ infinispanVersion }}-bin.zip' dest=/usr/local/infinispan-server-{{ infinispanVersion }}-bin.zip
       when: not(infinispanVersion | trim == '')
 
     - name: extract infinispan 
+      unarchive: src=/usr/local/{{ zip | basename }} dest='/usr/local/' copy=no
+      when: not(zip | trim == '')
+
+    - name: extract downloaded infinispan
       unarchive: src='/usr/local/infinispan-server-{{ infinispanVersion }}-bin.zip' dest='/usr/local/' copy=no
       when: not(infinispanVersion | trim == '')
     
     - name: symlink for infinispan
-      file: src=/usr/local/infinispan-server-{{ infinispanVersion }}/ dest=/usr/local/infinispan state=link
-      when: not(infinispanVersion | trim == '')
+      shell: "ln -sfn $(ls -cd /usr/local/infinispan-server-* | head -1) /usr/local/infinispan"
+      when: not(infinispanVersion | trim == '') or not(zip | trim == '')
 
     - name: hack to make repo.jboss.org accessible
       lineinfile: dest=/etc/hosts line="209.132.182.33 repository.jboss.org"
-      when: infinispanVersion | trim == ''
+      when: not(zip | trim == '') and infinispanVersion | trim == ''
 
     - name: clone sources
       git: repo={{ github }} dest=/usr/local/source version={{ branch }} force=yes
-      when: infinispanVersion | trim == ''
+      when: not(github | trim == '')
       tags: source
 
     - name: build sources
       shell: "cd /usr/local/source && mvn install -DskipTests=true -s maven-settings.xml > build.log"
-      when: infinispanVersion | trim == ''
+      when: not(github | trim == '')
       tags: source
 
     - name: source version
       shell: "cat /usr/local/source/pom.xml | grep version | grep -v xml  | html2text | tr -d ' '"
       register: source_version 
-      when: infinispanVersion | trim == ''
+      when: not(github | trim == '')
 
     - name: install binary 
       shell: "rm -Rf /usr/local/infinispan-server && cp -R /usr/local/source/server/integration/build/target/infinispan-server-*/ /usr/local/infinispan-server/ && ln -nfs /usr/local/infinispan-server/ /usr/local/infinispan"
-      when: infinispanVersion | trim == ''
+      when: not(github | trim == '')
 
     - name: infinispan pid
       command: pgrep -f org.jboss.as.standalone
@@ -108,13 +125,47 @@
     - name: configure cache loader outbound
       blockinfile:
          dest: /usr/local/infinispan/standalone/configuration/clustered.xml
-         insertafter: 'socket-binding name="websocket"'
+         insertbefore: '</socket-binding-group>'
          marker: '<!-- ansible #2 -->'
          content: | 
              <outbound-socket-binding name="source-cluster">
                <remote-destination host="{{ cluster }}" port="11222"/>
              </outbound-socket-binding> 
       when: not(cluster | trim == '')
+
+    - name: Check whether extra stack is needed 
+      command: grep 'tcp-gossip' /usr/local/infinispan/standalone/configuration/clustered.xml 
+      ignore_errors: true
+      register: hasgossip
+
+    - name: change tcp stack for gossip
+      blockinfile:
+        dest: /usr/local/infinispan/standalone/configuration/clustered.xml
+        insertbefore: '<stack name="s3">' 
+        marker: '<!-- ansible #3 -->'
+        content: |
+              <stack name="tcp-gossip">
+                <transport type="TCP" socket-binding="jgroups-tcp"/>
+                <protocol type="TCPGOSSIP">
+                   <property name="initial_hosts">${jgroups.gossip.initial_hosts:}</property>
+                </protocol>
+                <protocol type="MERGE3" />
+                <protocol type="FD_SOCK" socket-binding="jgroups-tcp-fd" />
+                <protocol type="FD_ALL" />
+                <protocol type="VERIFY_SUSPECT" />
+                <protocol type="pbcast.NAKACK2">
+                   <property name="use_mcast_xmit">false</property>
+                </protocol>
+                <protocol type="UNICAST3" />
+                <protocol type="pbcast.STABLE" />
+                <protocol type="pbcast.GMS" />
+                <protocol type="MFC" />
+                <protocol type="FRAG2" />
+              </stack>
+      when: hasgossip.rc != 0
+
+    - name: change hotrod bind
+      replace: dest=/usr/local/infinispan/standalone/configuration/clustered.xml regexp='name="hotrod" interface="management"' replace='name="hotrod"'
 
     - name: start infinispan
       shell: "nohup /usr/local/infinispan/bin/standalone.sh -c clustered.xml -Djboss.default.jgroups.stack=tcp-gossip -Djgroups.gossip.initial_hosts={{ hostvars[groups['master'][0]]['ansible_eth0']['ipv4']['address']  }}[12001] -Djgroups.bind_addr={{ ansible_eth0.ipv4.address  }} -Djboss.bind.address={{ ansible_eth0.ipv4.address }} &"
@@ -124,9 +175,13 @@
 
     - name: copy data generator deps
       shell: "cp /root/.m2/repository/org/infinispan/infinispan-remote/{{ source_version.stdout }}/infinispan-remote-{{ source_version.stdout }}.jar /usr/local/infinispan-remote.jar"
-      when: infinispanVersion | trim == ''
+      when: (infinispanVersion | trim == '') and (zip | trim == '')
 
     - name: copy binary deps
       get_url: url='http://repo1.maven.org/maven2/org/infinispan/infinispan-remote/{{ infinispanVersion }}/infinispan-remote-{{ infinispanVersion }}.jar' dest=/usr/local/infinispan-remote.jar
       when: not(infinispanVersion | trim == '')
+
+    - name: copy provided client zip 
+      copy: src={{ clientZip }}  dest=/usr/local/infinispan-remote.jar mode=0755
+      when: not(zip | trim == '')
 
